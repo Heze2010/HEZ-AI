@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>HEZ AI</title>
+<meta name="theme-color" content="#0B2A4A" />
+<link rel="manifest" href="/manifest.json" />
+<link rel="icon" href="/icon-192.png" />
+<link rel="apple-touch-icon" href="/icon-192.png" />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  html, body, #root { height: 100%; margin: 0; }
+  * { box-sizing: border-box; }
+  ::selection { background: #bfe0f5; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useRef, useEffect } = React;
+
+const SUBJECTS = [
+  { id: "general", code: "ALL", name: "All Subjects", tagline: "Ask anything — it sorts out the subject", accent: "#0B2A4A" },
+  { id: "biology", code: "BIO", name: "Biology & Disease", tagline: "Cells, pathogens, the body's own defense ledger", accent: "#1B4E7E" },
+  { id: "chemistry", code: "CHM", name: "Chemistry", tagline: "Reactions, bonds, the periodic table's arithmetic", accent: "#2E6DA4" },
+  { id: "mathematics", code: "MTH", name: "Mathematics", tagline: "Proof, pattern, and the working shown in the margin", accent: "#14314F" },
+  { id: "physics", code: "PHY", name: "Physics", tagline: "Force, field, and the motion that obeys them", accent: "#3D8FC4" },
+  { id: "geography", code: "GEO", name: "Geography", tagline: "Terrain, climate, and the borders between them", accent: "#6BAED9" },
+  { id: "commerce", code: "COM", name: "Commerce & Business", tagline: "Ledgers, markets, and the logic of trade", accent: "#103A63" },
+  { id: "art", code: "ART", name: "Art", tagline: "Form, movement, and the history behind the brush", accent: "#5FA8D3" },
+];
+
+function Stamp({ code, accent, size = 44 }) {
+  return (
+    <div style={{
+      width: size, height: size * 0.62, border: `2px solid ${accent}`, borderRadius: 3,
+      display: "flex", alignItems: "center", justifyContent: "center", color: accent,
+      fontFamily: "'IBM Plex Mono', monospace", fontWeight: 700, fontSize: size * 0.28,
+      letterSpacing: 1, transform: "rotate(-2deg)", flexShrink: 0, background: "rgba(255,255,255,0.6)",
+    }}>{code}</div>
+  );
+}
+
+function HezAI() {
+  const [activeId, setActiveId] = useState("general");
+  const [threads, setThreads] = useState({});
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const scrollRef = useRef(null);
+
+  const subject = SUBJECTS.find((s) => s.id === activeId);
+  const messages = threads[activeId] || [];
+
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [messages, loading, activeId]);
+
+  async function send() {
+    const text = input.trim();
+    if (!text || loading) return;
+    setError(null);
+    const history = [...messages, { role: "user", content: text }];
+    setThreads((t) => ({ ...t, [activeId]: history }));
+    setInput("");
+    setLoading(true);
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subjectId: activeId, messages: history }),
+      });
+      if (!res.ok) throw new Error("bad response");
+      const data = await res.json();
+      setThreads((t) => ({ ...t, [activeId]: [...history, { role: "assistant", content: data.reply }] }));
+    } catch (e) {
+      setError("Couldn't reach the tutor. Try again in a moment.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function onKeyDown(e) {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+  }
+
+  return (
+    <div style={styles.root}>
+      <div style={styles.shell}>
+        <nav style={styles.rail}>
+          <div style={styles.railHead}>
+            <div style={styles.railEyebrow}>HEZ AI</div>
+            <div style={styles.railSub}>pick a subject, ask anything</div>
+          </div>
+          {SUBJECTS.map((s) => {
+            const active = s.id === activeId;
+            return (
+              <button key={s.id} onClick={() => setActiveId(s.id)} style={{
+                ...styles.tab,
+                background: active ? "rgba(255,255,255,0.14)" : "transparent",
+                borderLeft: active ? "4px solid #7EC8E3" : "4px solid transparent",
+              }}>
+                <Stamp code={s.code} accent="#FFFFFF" />
+                <div style={{ textAlign: "left", minWidth: 0 }}>
+                  <div style={styles.tabName}>{s.name}</div>
+                  <div style={styles.tabTagline}>{s.tagline}</div>
+                </div>
+              </button>
+            );
+          })}
+        </nav>
+        <main style={styles.main}>
+          <header style={{ ...styles.header, borderBottom: `3px solid ${subject.accent}` }}>
+            <Stamp code={subject.code} accent={subject.accent} size={52} />
+            <div>
+              <h1 style={styles.title}>{subject.name}</h1>
+              <p style={styles.headerTagline}>{subject.tagline}</p>
+            </div>
+          </header>
+          <div ref={scrollRef} style={styles.messages}>
+            {messages.length === 0 && (
+              <div style={styles.empty}>
+                <div style={{ ...styles.emptyRule, background: subject.accent }} />
+                <p style={styles.emptyText}>
+                  Open a question in {subject.name.toLowerCase()} — a definition, a worked problem, a mechanism you want unpacked.
+                </p>
+              </div>
+            )}
+            {messages.map((m, i) => (
+              <div key={i} style={{ ...styles.bubbleRow, justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
+                <div style={{
+                  ...styles.bubble,
+                  background: m.role === "user" ? "#0B2A4A" : "#FFFFFF",
+                  color: m.role === "user" ? "#FFFFFF" : "#0B2A4A",
+                  border: m.role === "user" ? "none" : `1px solid ${subject.accent}55`,
+                }}>{m.content}</div>
+              </div>
+            ))}
+            {loading && (
+              <div style={{ ...styles.bubbleRow, justifyContent: "flex-start" }}>
+                <div style={{ ...styles.bubble, background: "#FFFFFF", color: "#5B7A98" }}>thinking …</div>
+              </div>
+            )}
+            {error && <div style={styles.errorText}>{error}</div>}
+          </div>
+          <div style={styles.inputRow}>
+            <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={onKeyDown}
+              placeholder={`Ask about ${subject.name.toLowerCase()} …`} rows={1} style={styles.textarea} />
+            <button onClick={send} disabled={loading || !input.trim()} style={{
+              ...styles.sendBtn, background: subject.accent, opacity: loading || !input.trim() ? 0.5 : 1,
+            }}>Ask</button>
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}
+
+const styles = {
+  root: { width: "100%", height: "100vh", background: "#FFFFFF", fontFamily: "'IBM Plex Sans', sans-serif", color: "#0B2A4A" },
+  shell: { display: "flex", height: "100%" },
+  rail: { width: 300, background: "#0B2A4A", display: "flex", flexDirection: "column", overflowY: "auto", flexShrink: 0 },
+  railHead: { padding: "22px 18px 14px" },
+  railEyebrow: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, letterSpacing: 2, fontWeight: 700, color: "#7EC8E3" },
+  railSub: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: "#a9c6de", marginTop: 4 },
+  tab: { display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", border: "none", borderBottom: "1px solid rgba(255,255,255,0.08)", cursor: "pointer", textAlign: "left" },
+  tabName: { fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 15.5, lineHeight: 1.2, color: "#FFFFFF" },
+  tabTagline: { fontFamily: "'IBM Plex Sans', sans-serif", fontSize: 11.5, color: "#9cc4e0", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  main: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0 },
+  header: { display: "flex", alignItems: "center", gap: 16, padding: "20px 28px", background: "repeating-linear-gradient(#FFFFFF, #FFFFFF 27px, #EAF4FC 28px)" },
+  title: { fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: 26, margin: 0, color: "#0B2A4A" },
+  headerTagline: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 12.5, color: "#5B7A98", margin: "4px 0 0" },
+  messages: { flex: 1, overflowY: "auto", padding: "24px 28px", display: "flex", flexDirection: "column", gap: 14, background: "repeating-linear-gradient(#FFFFFF, #FFFFFF 27px, #EAF4FC 28px)" },
+  empty: { maxWidth: 460, margin: "40px auto 0" },
+  emptyRule: { width: 42, height: 3, marginBottom: 14 },
+  emptyText: { fontSize: 15, lineHeight: 1.6, color: "#3E6180" },
+  bubbleRow: { display: "flex" },
+  bubble: { maxWidth: "72%", padding: "12px 16px", borderRadius: 4, fontSize: 15, lineHeight: 1.55, whiteSpace: "pre-wrap" },
+  errorText: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 12.5, color: "#B23B3B" },
+  inputRow: { display: "flex", gap: 10, padding: "16px 28px 22px", borderTop: "1px solid #cfe4f3", background: "#FFFFFF" },
+  textarea: { flex: 1, resize: "none", padding: "12px 14px", borderRadius: 4, border: "1px solid #b9d8ec", background: "#F5FAFE", fontFamily: "'IBM Plex Sans', sans-serif", fontSize: 14.5, color: "#0B2A4A", lineHeight: 1.4 },
+  sendBtn: { padding: "0 22px", border: "none", borderRadius: 4, color: "#FFFFFF", fontFamily: "'IBM Plex Mono', monospace", fontWeight: 600, fontSize: 13, letterSpacing: 0.5, cursor: "pointer" },
+};
+
+ReactDOM.createRoot(document.getElementById("root")).render(<HezAI />);
+</script>
+
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js"));
+  }
+</script>
+</body>
+  </html>
